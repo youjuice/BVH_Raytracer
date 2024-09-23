@@ -6,7 +6,12 @@
     "target": "es5",
     "jsx": "react",
     "allowJs": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "babylonjs": ["node_modules/babylonjs"],
+      "babylonjs/*": ["node_modules/babylonjs/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.glsl"]
 }
