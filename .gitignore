@@ -1,0 +1,10 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+
+# IDE settings
+.vscode/
+.idea/
