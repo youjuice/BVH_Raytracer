@@ -20,19 +20,16 @@ window.addEventListener('DOMContentLoaded', () => {
     const raytracer = new Raytracer(scene, camera);
 
     // 성능 측정
-    const performanceMeasurement = new PerformanceMeasurement(10000);
+    const performanceMeasurement = new PerformanceMeasurement(scene, 10000);
 
     // 렌더 루프
     engine.runRenderLoop(() => {
-        const frameStart = performance.now();
-
         raytracer.update();
         scene.render();
 
-        const frameTime = performance.now() - frameStart;
-
-        if (performanceMeasurement.recordFrame(frameTime)) {
+        if (performanceMeasurement.recordFrame()) {
             console.log(performanceMeasurement.getResults());
+            performanceMeasurement.dispose();
             engine.stopRenderLoop();
         }
     });
