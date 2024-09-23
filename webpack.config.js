@@ -11,10 +11,15 @@ module.exports = {
                 use: 'ts-loader',
                 exclude: /node_modules/,
             },
+            {
+                test: /\.glsl$/,
+                use: 'raw-loader',
+                exclude: /node_modules/,
+            }
         ],
     },
     resolve: {
-        extensions: ['.tsx', '.ts', '.js'],
+        extensions: ['.tsx', '.ts', '.js', '.glsl'],
     },
     output: {
         filename: '[name].[contenthash].js',
@@ -33,17 +38,5 @@ module.exports = {
         },
         compress: true,
         port: 9000
-    },
-    optimization: {
-        runtimeChunk: 'single',
-        splitChunks: {
-            cacheGroups: {
-                vendor: {
-                    test: /[\\/]node_modules[\\/]/,
-                    name: 'vendors',
-                    chunks: 'all',
-                },
-            },
-        },
     },
 };
