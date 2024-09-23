@@ -4,41 +4,41 @@ precision highp float;
 #define SPHERE_COUNT 3
 const int MAX_BOUNCES = 3;
 
-uniform mat4 worldViewProjection;
-uniform vec3 cameraPosition;
-uniform vec3 cameraDirection;
+uniform mat4 worldViewProjection;       // 월드 및 뷰 변환 행렬
+uniform vec3 cameraPosition;            // 카메라 위치
+uniform vec3 cameraDirection;           // 카메라 방향
 uniform vec3 cameraUp;
 uniform vec3 cameraRight;
-uniform float aspectRatio;
-uniform float fov;
-uniform vec4 spheres[SPHERE_COUNT];
-uniform vec3 lightPosition;
-uniform vec2 resolution;
-out vec4 fragColor;
+uniform float aspectRatio;              // 화면 비율
+uniform float fov;                      // 카메라의 시야각
+uniform vec4 spheres[SPHERE_COUNT];     // 구체 데이터
+uniform vec3 lightPosition;             // 빛의 위치
+uniform vec2 resolution;                // 화면 해상도
+out vec4 fragColor;                     // 최종적으로 출력되는 픽셀 색상
 
-struct Ray {
+struct Ray {                            // 광선 구조체
     vec3 origin;
     vec3 direction;
 };
 
-struct Hit {
+struct Hit {                            // 광선과 구체의 교차 정보
     bool didHit;
     float distance;
     vec3 position;
     vec3 normal;
 };
 
+// 카메라 광선 생성
 Ray createCameraRay(vec2 uv) {
     vec2 ndc = uv * 2.0 - 1.0;
     ndc.x *= aspectRatio;
 
-    vec3 direction = normalize(cameraDirection +
-                               cameraRight * ndc.x * tan(fov * 0.5) +
-    cameraUp * ndc.y * tan(fov * 0.5));
+    vec3 direction = normalize(cameraDirection + cameraRight * ndc.x * tan(fov * 0.5) + cameraUp * ndc.y * tan(fov * 0.5));
 
     return Ray(cameraPosition, direction);
 }
 
+// 광선과 구체의 교차점 계산
 Hit intersectSphere(Ray ray, vec4 sphere) {
     vec3 oc = ray.origin - sphere.xyz;
     float b = dot(oc, ray.direction);
@@ -57,6 +57,7 @@ Hit intersectSphere(Ray ray, vec4 sphere) {
     return Hit(true, t, position, normal);
 }
 
+// 그림자 유무 판단
 bool isInShadow(vec3 position, vec3 lightDir) {
     Ray shadowRay = Ray(position + lightDir * 0.001, lightDir);
     for (int i = 0; i < SPHERE_COUNT; i++) {
@@ -68,6 +69,7 @@ bool isInShadow(vec3 position, vec3 lightDir) {
     return false;
 }
 
+// 조명 계산
 vec3 calculateLighting(vec3 position, vec3 normal, vec3 viewDir) {
     vec3 lightDir = normalize(lightPosition - position);
 
@@ -89,6 +91,7 @@ vec3 calculateLighting(vec3 position, vec3 normal, vec3 viewDir) {
     return (ambient + (diffuse + specular) * shadow);
 }
 
+// 광선 추적
 vec3 traceRay(Ray initialRay) {
     vec3 color = vec3(0.0);
     vec3 rayColor = vec3(1.0);
@@ -115,7 +118,7 @@ vec3 traceRay(Ray initialRay) {
             // 반사 설정
             vec3 reflectDir = reflect(currentRay.direction, closestHit.normal);
             currentRay = Ray(closestHit.position + reflectDir * 0.001, reflectDir);
-            rayColor *= 0.2;  // 각 반사에서 빛의 강도를 줄임
+            rayColor *= 0.2;  // 반사가 진행될수록 빛의 세기 감소
         } else {
             // 배경색 추가
             color += rayColor * vec3(0.2, 0.2, 0.2);
