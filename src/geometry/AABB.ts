@@ -31,4 +31,9 @@ export class AABB {
             ? (extent.x > extent.z ? 0 : 2)
             : (extent.y > extent.z ? 1 : 2);
     }
+
+    getVolume(): number {
+        const extent = this.max.subtract(this.min);
+        return extent.x * extent.y * extent.z;
+    }
 }
