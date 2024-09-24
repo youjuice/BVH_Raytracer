@@ -1,9 +1,15 @@
 import { BVHNode } from './BVHNode';
 import { AABB } from '../geometry/AABB';
 import { Vector3 } from "babylonjs";
+import { Primitive } from "../geometry/Primitive";
 
-interface Primitive {
-    getAABB(): AABB;
+function expandRootAABB(aabb: AABB, expansionFactor: number = 1.1): AABB {
+    const center = aabb.getCenter();
+    const extent = aabb.max.subtract(aabb.min).scale(0.5 * expansionFactor);
+    return new AABB(
+        center.subtract(extent),
+        center.add(extent)
+    );
 }
 
 export function buildBVH(primitives: Primitive[], maxPrimitivesPerLeaf: number = 4): BVHNode {
@@ -11,7 +17,8 @@ export function buildBVH(primitives: Primitive[], maxPrimitivesPerLeaf: number =
     if (primitives.length === 0) {
         throw new Error("Cannot build BVH from empty primitive list");
     }
-    const aabb = computeAABB(primitives);
+    let aabb = computeAABB(primitives);
+    aabb = expandRootAABB(aabb); // 루트 AABB 확장
     return buildBVHRecursive(primitives, aabb, maxPrimitivesPerLeaf, 0);
 }
 
@@ -19,7 +26,10 @@ function buildBVHRecursive(primitives: Primitive[], aabb: AABB, maxPrimitivesPer
     console.log(`Depth ${depth}: Processing ${primitives.length} primitives`);
     const node = new BVHNode(aabb);
 
-    if (primitives.length <= maxPrimitivesPerLeaf) {
+    const aabbVolume = aabb.getVolume();
+    const minVolume = 0.01; // 적절한 최소 부피 설정
+
+    if (primitives.length <= maxPrimitivesPerLeaf || aabbVolume < minVolume || depth > 20) {
         node.primitiveIndices = primitives.map((_, index) => index);
         console.log(`Depth ${depth}: Created leaf node with ${primitives.length} primitives`);
         return node;
@@ -124,9 +134,19 @@ function findBestSplitSAH(primitives: Primitive[], axis: number): number {
         }
     }
 
-    const splitIndex = Math.floor(primitives.length / 2);
-    console.log(`SAH split index: ${splitIndex}`);
-    return splitIndex;
+    if (bestSplit === -1 || minCost > totalCount) {
+        // SAH가 분할을 추천하지 않는 경우, 중간점으로 분할
+        return Math.floor(primitives.length / 2);
+    }
+
+    // SAH가 추천한 지점으로 분할
+    let splitCount = 0;
+    for (let i = 0; i < bestSplit; i++) {
+        splitCount += buckets[i].count;
+    }
+
+    console.log(`SAH split index: ${splitCount}`);
+    return splitCount;
 }
 
 function computeAABBSurfaceArea(aabb: AABB): number {
