@@ -1,6 +1,8 @@
-import { Engine, Scene, FreeCamera, Vector3, Color4, Viewport } from 'babylonjs';
+import { Engine, Scene, FreeCamera, Vector3, Color4, Viewport, Mesh, VertexBuffer } from 'babylonjs';
 import { Raytracer } from './raytracer/Raytracer';
 import { PerformanceMeasurement } from './PerformanceMeasurement';
+import { buildBVH } from './bvh/BVHBuilder';
+import { Sphere } from './geometry/Sphere';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -16,8 +18,21 @@ window.addEventListener('DOMContentLoaded', () => {
     scene.clearColor = new Color4(0.0, 0.0, 0.2, 1.0);
     camera.viewport = new Viewport(0, 0, 1, 1);
 
-    // Raytracer 초기화
-    const raytracer = new Raytracer(scene, camera);
+    // 구체 생성
+    const spheres: Sphere[] = [
+        new Sphere(new Vector3(0, 0, 0), 1),
+        new Sphere(new Vector3(-2, 0, 2), 0.5),
+        new Sphere(new Vector3(2, 0, 2), 0.5),
+        new Sphere(new Vector3(0, 2, -2), 0.7),
+        new Sphere(new Vector3(-1, -1, -1), 0.3),
+        new Sphere(new Vector3(1, 1, 1), 0.4),
+    ];
+
+    // BVH 구축
+    const bvh = buildBVH(spheres);
+
+    // Raytracer 초기화 (BVH 전달)
+    const raytracer = new Raytracer(scene, camera, bvh, spheres);
 
     // 성능 측정
     const performanceMeasurement = new PerformanceMeasurement(scene, 10000);
