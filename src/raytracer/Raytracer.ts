@@ -1,4 +1,4 @@
-import { Scene, FreeCamera, Vector2, Vector3, Vector4, ShaderMaterial, Effect, Mesh } from 'babylonjs';
+import { Engine, Scene, FreeCamera, Vector2, Vector3, Vector4, ShaderMaterial, Effect, Mesh, RawTexture } from 'babylonjs';
 import raytraceFragmentShader from './shaders/raytracer.fragment.glsl';
 import raytraceVertexShader from './shaders/raytracer.vertex.glsl';
 import { BVHNode } from '../bvh/BVHNode';
@@ -11,12 +11,13 @@ export class Raytracer {
     private spheresData: Vector4[];
     private lightPosition: Vector3;
     private flattenedBVH: number[];
-    private bvhInitialized: boolean = false;
+    private bvhTexture: RawTexture;
 
     constructor(private scene: Scene, private camera: FreeCamera, private bvh: BVHNode, private spheres: Sphere[]) {
         this.initShaders();
         this.initSpheresData();
         this.initBVH();
+        this.initBVHTexture();
         this.initMaterial();
         this.initPlane();
         this.lightPosition = new Vector3(5, 5, -5);
@@ -36,18 +37,39 @@ export class Raytracer {
         console.log("Flattened BVH:", Array.from(this.flattenedBVH.slice(0, 24))); // 처음 3개 노드만 출력
     }
 
+    private initBVHTexture() {
+        const textureSize = Math.ceil(Math.sqrt(this.flattenedBVH.length / 4));
+        const paddedData = new Float32Array(textureSize * textureSize * 4);
+        paddedData.set(this.flattenedBVH);
+
+        this.bvhTexture = RawTexture.CreateRGBATexture(
+            paddedData,
+            textureSize,
+            textureSize,
+            this.scene,
+            false,
+            false,
+            Engine.TEXTURE_NEAREST_SAMPLINGMODE,
+            Engine.TEXTURETYPE_FLOAT
+        );
+    }
+
     private initMaterial() {
         this.rayTraceMaterial = new ShaderMaterial("rayTrace", this.scene, {
             vertex: "raytrace",
             fragment: "raytrace",
         }, {
             attributes: ["position", "uv"],
-            uniforms: ["worldViewProjection", "cameraPosition", "cameraDirection", "cameraUp", "cameraRight", "aspectRatio", "fov", "spheres", "lightPosition", "resolution", "bvhNodes"],
+            uniforms: ["worldViewProjection", "cameraPosition", "cameraDirection", "cameraUp", "cameraRight", "aspectRatio", "fov", "spheres", "lightPosition", "resolution", "bvhTextureSize"],
+            samplers: ["bvhTexture"],
             defines: [
                 "#define SPHERE_COUNT " + this.spheres.length,
-                "#define MAX_BVH_NODES " + this.flattenedBVH.length / 8
+                "#define USE_BVH_TEXTURE"
             ]
         });
+
+        this.rayTraceMaterial.setTexture("bvhTexture", this.bvhTexture);
+        this.rayTraceMaterial.setFloat("bvhTextureSize", this.bvhTexture.getSize().width);
     }
 
     private initPlane() {
@@ -61,12 +83,6 @@ export class Raytracer {
             acc.push(sphere.x, sphere.y, sphere.z, sphere.w);
             return acc;
         }, [] as number[]);
-
-        // BVH 데이터를 한 번만 설정
-        if (!this.bvhInitialized) {
-            this.rayTraceMaterial.setFloats("bvhNodes", this.flattenedBVH);
-            this.bvhInitialized = true;
-        }
 
         this.rayTraceMaterial.setVector3("cameraPosition", this.camera.position);
         this.rayTraceMaterial.setVector3("cameraDirection", this.camera.getForwardRay().direction);

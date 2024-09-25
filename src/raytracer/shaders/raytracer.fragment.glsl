@@ -14,7 +14,9 @@ uniform float fov;                              // 카메라의 시야각
 uniform vec4 spheres[SPHERE_COUNT];             // 구체 데이터
 uniform vec3 lightPosition;                     // 빛의 위치
 uniform vec2 resolution;                        // 화면 해상도
-uniform highp float bvhNodes[MAX_BVH_NODES];    // BVH 노드 데이터
+uniform sampler2D bvhTexture;
+uniform float bvhTextureSize;
+
 out vec4 fragColor;                             // 최종적으로 출력되는 픽셀 색상
 
 struct Ray {
@@ -86,12 +88,19 @@ bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax, out float tMin, out float tM
 }
 
 BVHNode getBVHNode(int index) {
+    float y = floor(float(index) / bvhTextureSize);
+    float x = float(index) - y * bvhTextureSize;
+    vec2 uv = vec2(x, y) / bvhTextureSize;
+    
+    vec4 data1 = texture(bvhTexture, uv);
+    vec4 data2 = texture(bvhTexture, vec2(uv.x + 1.0 / bvhTextureSize, uv.y));
+    
     BVHNode node;
-    int baseIndex = index * 8;
-    node.aabbMin = vec3(bvhNodes[baseIndex], bvhNodes[baseIndex + 1], bvhNodes[baseIndex + 2]);
-    node.aabbMax = vec3(bvhNodes[baseIndex + 3], bvhNodes[baseIndex + 4], bvhNodes[baseIndex + 5]);
-    node.leftRight = bvhNodes[baseIndex + 6];
-    node.primitiveCount = bvhNodes[baseIndex + 7];
+    node.aabbMin = data1.xyz;
+    node.aabbMax = data2.xyz;
+    node.leftRight = data1.w;
+    node.primitiveCount = data2.w;
+    
     return node;
 }
 
@@ -206,30 +215,6 @@ vec3 traceRay(Ray initialRay) {
 }
 
 void main() {
-    // vec2 uv = gl_FragCoord.xy / resolution.xy;
-    // int index = int(uv.x * 8.0);
-    // float value = bvhNodes[index];
-    
-    // // 더 넓은 범위로 정규화 (-3 to 3 -> 0 to 1)
-    // float normalizedValue = (value + 3.0) / 6.0;
-    // normalizedValue = clamp(normalizedValue, 0.0, 1.0);
-    
-    // // 음수는 파란색, 양수는 빨간색, 0에 가까우면 녹색
-    // vec3 color;
-    // if (value < -0.01) {
-    //     color = vec3(0.0, 0.0, normalizedValue);
-    // } else if (value > 0.01) {
-    //     color = vec3(normalizedValue, 0.0, 0.0);
-    // } else {
-    //     color = vec3(0.0, normalizedValue, 0.0);
-    // }
-    
-    // fragColor = vec4(color, 1.0);
-    
-    // // 디버그 정보 (화면 하단에 실제 값 표시)
-    // if (gl_FragCoord.y < 20.0) {
-    //     fragColor = vec4(value * 0.1 + 0.5, 0.0, 0.0, 1.0);
-    // }
     vec3 color = vec3(0.0);
     int samples = 4;
     vec2 uv = gl_FragCoord.xy / resolution.xy;
