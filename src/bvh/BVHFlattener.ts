@@ -22,7 +22,7 @@ export function flattenBVH(root: BVHNode): number[] {
         } else {
             // Internal node
             const leftIndex = flatten(node.left!);
-            nodes.push(leftIndex, 0); // 0 as placeholder for split axis
+            nodes.push(leftIndex, 0);
             flatten(node.right!);
         }
 
