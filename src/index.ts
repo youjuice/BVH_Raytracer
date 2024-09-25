@@ -6,7 +6,10 @@ import { Sphere } from './geometry/Sphere';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-    const engine = new Engine(canvas);
+    const engine = new Engine(canvas, true, {
+        preserveDrawingBuffer: true,
+        stencil: true
+    }, true);
     const scene = new Scene(engine);
 
     // 카메라 설정
