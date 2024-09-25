@@ -1,5 +1,6 @@
 #version 300 es
 precision highp float;
+precision highp int;
 
 const int MAX_BOUNCES = 3;
 
@@ -13,7 +14,7 @@ uniform float fov;                              // 카메라의 시야각
 uniform vec4 spheres[SPHERE_COUNT];             // 구체 데이터
 uniform vec3 lightPosition;                     // 빛의 위치
 uniform vec2 resolution;                        // 화면 해상도
-uniform float bvhNodes[MAX_BVH_NODES];          // BVH 노드 데이터
+uniform highp float bvhNodes[MAX_BVH_NODES];    // BVH 노드 데이터
 out vec4 fragColor;                             // 최종적으로 출력되는 픽셀 색상
 
 struct Ray {
@@ -32,8 +33,8 @@ struct Hit {
 struct BVHNode {
     vec3 aabbMin;
     vec3 aabbMax;
-    float leftRight;
-    float primitiveCount;
+    float leftRight;        // 내부 노드의 경우 왼쪽 자식, 리프 노드의 경우 프리미티브 인덱스
+    float primitiveCount;   // 내부 노드의 경우 0, 리프 노드의 경우 프리미티브 수
 };
 
 Ray createCameraRay(vec2 uv) {
@@ -112,8 +113,8 @@ Hit traverseBVH(Ray r) {
             if (tMin > result.distance) {
                 continue;
             }
-            // Leaf node
-            if (node.primitiveCount < 0.0) {  
+
+            if (node.primitiveCount < 0.0) {  // Leaf node
                 int primitiveCount = int(-node.primitiveCount);
                 int firstPrimitiveIndex = int(node.leftRight);
                 for (int i = 0; i < primitiveCount; i++) {
@@ -126,30 +127,33 @@ Hit traverseBVH(Ray r) {
                 }
             } else {  // Internal node
                 int leftChildIndex = int(node.leftRight);
-                int splitAxis = int(node.primitiveCount);
+                int rightChildIndex = leftChildIndex + 1;
                 
                 BVHNode leftChild = getBVHNode(leftChildIndex);
-                BVHNode rightChild = getBVHNode(leftChildIndex + 1);
+                BVHNode rightChild = getBVHNode(rightChildIndex);
+                
                 float leftDist, leftMax, rightDist, rightMax;
                 bool hitLeft = intersectAABB(r, leftChild.aabbMin, leftChild.aabbMax, leftDist, leftMax);
                 bool hitRight = intersectAABB(r, rightChild.aabbMin, rightChild.aabbMax, rightDist, rightMax);
                 
+                // Push children to stack in front-to-back order
                 if (hitLeft && hitRight) {
                     if (leftDist < rightDist) {
-                        stack[stackPtr++] = leftChildIndex + 1;
+                        stack[stackPtr++] = rightChildIndex;
                         stack[stackPtr++] = leftChildIndex;
                     } else {
                         stack[stackPtr++] = leftChildIndex;
-                        stack[stackPtr++] = leftChildIndex + 1;
+                        stack[stackPtr++] = rightChildIndex;
                     }
                 } else if (hitLeft) {
                     stack[stackPtr++] = leftChildIndex;
                 } else if (hitRight) {
-                    stack[stackPtr++] = leftChildIndex + 1;
+                    stack[stackPtr++] = rightChildIndex;
                 }
             }
         }
     }
+
     return result;
 }
 
@@ -202,6 +206,30 @@ vec3 traceRay(Ray initialRay) {
 }
 
 void main() {
+    // vec2 uv = gl_FragCoord.xy / resolution.xy;
+    // int index = int(uv.x * 8.0);
+    // float value = bvhNodes[index];
+    
+    // // 더 넓은 범위로 정규화 (-3 to 3 -> 0 to 1)
+    // float normalizedValue = (value + 3.0) / 6.0;
+    // normalizedValue = clamp(normalizedValue, 0.0, 1.0);
+    
+    // // 음수는 파란색, 양수는 빨간색, 0에 가까우면 녹색
+    // vec3 color;
+    // if (value < -0.01) {
+    //     color = vec3(0.0, 0.0, normalizedValue);
+    // } else if (value > 0.01) {
+    //     color = vec3(normalizedValue, 0.0, 0.0);
+    // } else {
+    //     color = vec3(0.0, normalizedValue, 0.0);
+    // }
+    
+    // fragColor = vec4(color, 1.0);
+    
+    // // 디버그 정보 (화면 하단에 실제 값 표시)
+    // if (gl_FragCoord.y < 20.0) {
+    //     fragColor = vec4(value * 0.1 + 0.5, 0.0, 0.0, 1.0);
+    // }
     vec3 color = vec3(0.0);
     int samples = 4;
     vec2 uv = gl_FragCoord.xy / resolution.xy;
