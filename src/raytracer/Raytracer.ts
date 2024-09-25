@@ -77,10 +77,5 @@ export class Raytracer {
         this.rayTraceMaterial.setArray4("spheres", spheresArray);
         this.rayTraceMaterial.setVector3("lightPosition", this.lightPosition);
         this.rayTraceMaterial.setVector2("resolution", new Vector2(this.scene.getEngine().getRenderWidth(), this.scene.getEngine().getRenderHeight()));
-
-        // console.log("Spheres data:", spheresArray);
-        // console.log("Camera position:", this.camera.position);
-        // console.log("Camera direction:", this.camera.getForwardRay().direction);
-        // console.log("Light position:", this.lightPosition);
     }
 }
