@@ -114,35 +114,47 @@ Hit traverseBVH(Ray r) {
         int nodeIndex = stack[--stackPtr];
         BVHNode node = getBVHNode(nodeIndex);
         float tMin, tMax;
-        
-        if (intersectAABB(r, node.aabbMin, node.aabbMax, tMin, tMax) && tMin < result.distance) {
-            if (int(node.primitiveCount) != 0) {  // 리프 노드
-                int primitiveCount = abs(int(node.primitiveCount));
-                int firstPrimitiveIndex = int(node.leftRight);
 
-                for (int i = 0; i < primitiveCount; i++) {
-                    int sphereIndex = firstPrimitiveIndex + i;
-                    Hit hit = intersectSphere(r, spheres[sphereIndex]);
-                    if (hit.didHit) {
-                        result = hit;
-                        result.sphereIndex = sphereIndex;
+        if (intersectAABB(r, node.aabbMin, node.aabbMax, tMin, tMax)) {
+            if (tMin < result.distance) {
+                // 리프 노드
+                if (node.primitiveCount < 0.0) {  
+                    int primitiveCount = int(-node.primitiveCount);
+                    int firstPrimitiveIndex = int(node.leftRight);
+    
+                    for (int i = 0; i < primitiveCount; i++) {
+                        int sphereIndex = firstPrimitiveIndex + i;
+                        Hit hit = intersectSphere(r, spheres[sphereIndex]);
+                        if (hit.didHit && hit.distance < result.distance) {
+                            result = hit;
+                            result.sphereIndex = sphereIndex;
+                        }
                     }
                 }
-            } else {  // 내부 노드
-                int leftChildIndex = int(node.leftRight);
-                int rightChildIndex = leftChildIndex + 1;
-                
-                // 자식 노드들을 스택에 바로 푸시
-                stack[stackPtr++] = rightChildIndex;
-                stack[stackPtr++] = leftChildIndex;
+                // 내부 노드
+                else {  
+                    int leftChildIndex = int(node.leftRight);
+                    int rightChildIndex = leftChildIndex + 1;
+
+                    // 거리에 따라 순서 조정
+                    vec3 center = (node.aabbMin + node.aabbMax) * 0.5;
+                    if (dot(r.direction, center - r.origin) > 0.0) {
+                        stack[stackPtr++] = rightChildIndex;
+                        stack[stackPtr++] = leftChildIndex;
+                    } else {
+                        stack[stackPtr++] = leftChildIndex;
+                        stack[stackPtr++] = rightChildIndex;
+                    }
+                }
             }
         }
     }
+
     return result;
 }
 
-// 디버깅용 (직접 교차 검사)
-Hit naiveIntersectionTest(Ray r) {
+// 직접 교차 검사 (BVH 사용 X)
+Hit directIntersectionTest(Ray r) {
     Hit result;
     result.didHit = false;
     result.distance = 1e30;
@@ -185,7 +197,7 @@ vec3 traceRay(Ray initialRay) {
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
         Hit closestHit = traverseBVH(currentRay);
-        // Hit closestHit = naiveIntersectionTest(currentRay);
+        // Hit closestHit = directIntersectionTest(currentRay);
 
         if (closestHit.didHit) {
             vec3 viewDir = normalize(cameraPosition - closestHit.position);
