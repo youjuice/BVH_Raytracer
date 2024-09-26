@@ -48,35 +48,31 @@ Ray createCameraRay(vec2 uv) {
     return Ray(cameraPosition, direction);
 }
 
-Hit intersectSphere(Ray ray, vec4 sphere) {
-    vec3 oc = ray.origin - sphere.xyz;
-    float a = dot(ray.direction, ray.direction);
-    float b = 2.0 * dot(oc, ray.direction);
+Hit intersectSphere(Ray r, vec4 sphere) {
+    vec3 oc = r.origin - sphere.xyz;
+    float a = dot(r.direction, r.direction);
+    float b = 2.0 * dot(oc, r.direction);
     float c = dot(oc, oc) - sphere.w * sphere.w;
     float discriminant = b * b - 4.0 * a * c;
-
+    
     Hit result;
-    result.didHit = false;
-    result.distance = 1e30;
-    result.position = vec3(0.0);
-    result.normal = vec3(0.0);
-    result.sphereIndex = -1;
-
-    if (discriminant >= 0.0) {
+    if (discriminant > 0.0) {
         float t = (-b - sqrt(discriminant)) / (2.0 * a);
         if (t > 0.0) {
             result.didHit = true;
             result.distance = t;
-            result.position = ray.origin + t * ray.direction;
+            result.position = r.origin + t * r.direction;
             result.normal = normalize(result.position - sphere.xyz);
+            return result;
         }
     }
-
+    
+    result.didHit = false;
     return result;
 }
 
 bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax, out float tMin, out float tMax) {
-    vec3 invDir = 1.0 / r.direction;
+    vec3 invDir = 1.0 / (r.direction + vec3(1e-6));
     vec3 t0s = (boxMin - r.origin) * invDir;
     vec3 t1s = (boxMax - r.origin) * invDir;
     vec3 tSmaller = min(t0s, t1s);
@@ -88,9 +84,9 @@ bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax, out float tMin, out float tM
 }
 
 BVHNode getBVHNode(int index) {
-    float y = floor(float(index) / bvhTextureSize);
-    float x = float(index) - y * bvhTextureSize;
-    vec2 uv = vec2(x, y) / bvhTextureSize;
+    int y = index / int(bvhTextureSize);
+    int x = index % int(bvhTextureSize);
+    vec2 uv = (vec2(x, y) + 0.5) / bvhTextureSize;
     
     vec4 data1 = texture(bvhTexture, uv);
     vec4 data2 = texture(bvhTexture, vec2(uv.x + 1.0 / bvhTextureSize, uv.y));
@@ -108,24 +104,22 @@ Hit traverseBVH(Ray r) {
     Hit result;
     result.didHit = false;
     result.distance = 1e30;
-
+    result.sphereIndex = -1;
+    
     int stack[64];
     int stackPtr = 0;
-    stack[stackPtr++] = 0;
-
+    stack[stackPtr++] = 0;  // 루트 노드부터 시작
+    
     while (stackPtr > 0) {
         int nodeIndex = stack[--stackPtr];
         BVHNode node = getBVHNode(nodeIndex);
-
         float tMin, tMax;
-        if (intersectAABB(r, node.aabbMin, node.aabbMax, tMin, tMax)) {
-            if (tMin > result.distance) {
-                continue;
-            }
-
-            if (node.primitiveCount < 0.0) {  // Leaf node
-                int primitiveCount = int(-node.primitiveCount);
+        
+        if (intersectAABB(r, node.aabbMin, node.aabbMax, tMin, tMax) && tMin < result.distance) {
+            if (int(node.primitiveCount) != 0) {  // 리프 노드
+                int primitiveCount = abs(int(node.primitiveCount));
                 int firstPrimitiveIndex = int(node.leftRight);
+
                 for (int i = 0; i < primitiveCount; i++) {
                     int sphereIndex = firstPrimitiveIndex + i;
                     Hit hit = intersectSphere(r, spheres[sphereIndex]);
@@ -134,37 +128,36 @@ Hit traverseBVH(Ray r) {
                         result.sphereIndex = sphereIndex;
                     }
                 }
-            } else {  // Internal node
+            } else {  // 내부 노드
                 int leftChildIndex = int(node.leftRight);
                 int rightChildIndex = leftChildIndex + 1;
                 
-                BVHNode leftChild = getBVHNode(leftChildIndex);
-                BVHNode rightChild = getBVHNode(rightChildIndex);
-                
-                float leftDist, leftMax, rightDist, rightMax;
-                bool hitLeft = intersectAABB(r, leftChild.aabbMin, leftChild.aabbMax, leftDist, leftMax);
-                bool hitRight = intersectAABB(r, rightChild.aabbMin, rightChild.aabbMax, rightDist, rightMax);
-                
-                // Push children to stack in front-to-back order
-                if (hitLeft && hitRight) {
-                    if (leftDist < rightDist) {
-                        stack[stackPtr++] = rightChildIndex;
-                        stack[stackPtr++] = leftChildIndex;
-                    } else {
-                        stack[stackPtr++] = leftChildIndex;
-                        stack[stackPtr++] = rightChildIndex;
-                    }
-                } else if (hitLeft) {
-                    stack[stackPtr++] = leftChildIndex;
-                } else if (hitRight) {
-                    stack[stackPtr++] = rightChildIndex;
-                }
+                // 자식 노드들을 스택에 바로 푸시
+                stack[stackPtr++] = rightChildIndex;
+                stack[stackPtr++] = leftChildIndex;
             }
         }
     }
-
     return result;
 }
+
+// 디버깅용 (직접 교차 검사)
+// Hit traverseBVH(Ray r) {
+//     Hit result;
+//     result.didHit = false;
+//     result.distance = 1e30;
+
+//     for (int i = 0; i < SPHERE_COUNT; i++) {
+//         vec4 sphere = spheres[i];
+//         Hit hit = intersectSphere(r, sphere);
+//         if (hit.didHit && hit.distance < result.distance) {
+//             result = hit;
+//             result.sphereIndex = i;
+//         }
+//     }
+
+//     return result;
+// }
 
 bool isInShadow(vec3 position, vec3 lightDir) {
     Ray shadowRay = Ray(position + lightDir * 0.001, lightDir);
