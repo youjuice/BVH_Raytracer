@@ -34,7 +34,6 @@ export class Raytracer {
 
     private initBVH() {
         this.flattenedBVH = flattenBVH(this.bvh);
-        console.log("Flattened BVH:", Array.from(this.flattenedBVH.slice(0, 24))); // 처음 3개 노드만 출력
     }
 
     private initBVHTexture() {
