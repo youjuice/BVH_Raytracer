@@ -1,6 +1,6 @@
 import { Engine, Scene, FreeCamera, Vector3, Color4, Viewport, Mesh, VertexBuffer } from 'babylonjs';
 import { Raytracer } from './raytracer/Raytracer';
-import { PerformanceMeasurement } from './PerformanceMeasurement';
+import { PerformanceMeasurement } from './utils/PerformanceMeasurement';
 import { buildBVH } from './bvh/BVHBuilder';
 import { Sphere } from './geometry/Sphere';
 
