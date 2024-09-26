@@ -11,10 +11,6 @@ export function flattenBVH(root: BVHNode): number[] {
             node.aabb.min.x, node.aabb.min.y, node.aabb.min.z,
             node.aabb.max.x, node.aabb.max.y, node.aabb.max.z
         );
-        
-        if (nodeIndex === 0) {  // 루트 노드인 경우
-            console.log("Flattened Root AABB:", nodes.slice(nodes.length - 6, nodes.length));
-        }
 
         if (node.isLeaf()) {
             // Leaf node
@@ -30,5 +26,7 @@ export function flattenBVH(root: BVHNode): number[] {
     }
 
     flatten(root);
+
+    console.log("Flattened BVH:", nodes);
     return nodes;
 }
