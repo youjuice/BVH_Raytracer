@@ -123,7 +123,7 @@ Hit traverseBVH(Ray r) {
                 for (int i = 0; i < primitiveCount; i++) {
                     int sphereIndex = firstPrimitiveIndex + i;
                     Hit hit = intersectSphere(r, spheres[sphereIndex]);
-                    if (hit.didHit && hit.distance < result.distance) {
+                    if (hit.didHit) {
                         result = hit;
                         result.sphereIndex = sphereIndex;
                     }
@@ -142,22 +142,21 @@ Hit traverseBVH(Ray r) {
 }
 
 // 디버깅용 (직접 교차 검사)
-// Hit traverseBVH(Ray r) {
-//     Hit result;
-//     result.didHit = false;
-//     result.distance = 1e30;
-
-//     for (int i = 0; i < SPHERE_COUNT; i++) {
-//         vec4 sphere = spheres[i];
-//         Hit hit = intersectSphere(r, sphere);
-//         if (hit.didHit && hit.distance < result.distance) {
-//             result = hit;
-//             result.sphereIndex = i;
-//         }
-//     }
-
-//     return result;
-// }
+Hit naiveIntersectionTest(Ray r) {
+    Hit result;
+    result.didHit = false;
+    result.distance = 1e30;
+    
+    for (int i = 0; i < SPHERE_COUNT; i++) {
+        Hit hit = intersectSphere(r, spheres[i]);
+        if (hit.didHit && hit.distance < result.distance) {
+            result = hit;
+            result.sphereIndex = i;
+        }
+    }
+    
+    return result;
+}
 
 bool isInShadow(vec3 position, vec3 lightDir) {
     Ray shadowRay = Ray(position + lightDir * 0.001, lightDir);
@@ -186,6 +185,7 @@ vec3 traceRay(Ray initialRay) {
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
         Hit closestHit = traverseBVH(currentRay);
+        // Hit closestHit = naiveIntersectionTest(currentRay);
 
         if (closestHit.didHit) {
             vec3 viewDir = normalize(cameraPosition - closestHit.position);
