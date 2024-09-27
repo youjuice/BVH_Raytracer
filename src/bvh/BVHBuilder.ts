@@ -3,7 +3,7 @@ import { AABB } from '../geometry/AABB';
 import { Vector3 } from "babylonjs";
 import { Primitive } from "../geometry/Primitive";
 
-function expandRootAABB(aabb: AABB, expansionFactor: number = 1.1): AABB {
+function expandRootAABB(aabb: AABB, expansionFactor: number = 1.6): AABB {
     const center = aabb.getCenter();
     const extent = aabb.max.subtract(aabb.min).scale(0.5 * expansionFactor);
     return new AABB(
