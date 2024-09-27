@@ -2,7 +2,7 @@
 precision highp float;
 precision highp int;
 
-const int MAX_BOUNCES = 3;
+const int MAX_BOUNCES = 2;
 
 uniform mat4 worldViewProjection;               // 월드 및 뷰 변환 행렬
 uniform vec3 cameraPosition;                    // 카메라 위치
@@ -71,16 +71,15 @@ Hit intersectSphere(Ray r, vec4 sphere) {
     return result;
 }
 
-bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax, out float tMin, out float tMax) {
+bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax) {
     vec3 invDir = 1.0 / (r.direction + vec3(1e-6));
-    vec3 t0s = (boxMin - r.origin) * invDir;
-    vec3 t1s = (boxMax - r.origin) * invDir;
-    vec3 tSmaller = min(t0s, t1s);
-    vec3 tBigger = max(t0s, t1s);
-    tMin = max(tSmaller.x, max(tSmaller.y, tSmaller.z));
-    tMax = min(tBigger.x, min(tBigger.y, tBigger.z));
-
-    return tMax > tMin && tMax > 0.0;
+    vec3 t0 = (boxMin - r.origin) * invDir;
+    vec3 t1 = (boxMax - r.origin) * invDir;
+    vec3 tmin = min(t0, t1);
+    vec3 tmax = max(t0, t1);
+    float tNear = max(max(tmin.x, tmin.y), tmin.z);
+    float tFar = min(min(tmax.x, tmax.y), tmax.z);
+    return tNear <= tFar;
 }
 
 BVHNode getBVHNode(int index) {
@@ -110,20 +109,21 @@ Hit traverseBVH(Ray r) {
     int stackPtr = 0;
     stack[stackPtr++] = 0;  // 루트 노드부터 시작
     
-    while (stackPtr > 0) {
+    int maxDepth = 64;  // 최대 순회 깊이 설정
+    int depth = 0;
+    
+    while (stackPtr > 0 && depth < maxDepth) {
         int nodeIndex = stack[--stackPtr];
         BVHNode node = getBVHNode(nodeIndex);
-        float tMin, tMax;
-
-        if (intersectAABB(r, node.aabbMin, node.aabbMax, tMin, tMax)) {
-            if (tMin < result.distance) {
-                // 리프 노드
-                if (node.primitiveCount < 0.0) {  
-                    int primitiveCount = int(-node.primitiveCount);
-                    int firstPrimitiveIndex = int(node.leftRight);
-    
-                    for (int i = 0; i < primitiveCount; i++) {
-                        int sphereIndex = firstPrimitiveIndex + i;
+        
+        if (intersectAABB(r, node.aabbMin, node.aabbMax)) {
+            if (int(node.primitiveCount) < 0) {  // 리프 노드
+                int primitiveCount = int(abs(node.primitiveCount));
+                int firstPrimitiveIndex = int(node.leftRight);
+                
+                for (int i = 0; i < primitiveCount; i++) {
+                    int sphereIndex = firstPrimitiveIndex + i;
+                    if (sphereIndex < SPHERE_COUNT) {  // 배열 범위 체크 추가
                         Hit hit = intersectSphere(r, spheres[sphereIndex]);
                         if (hit.didHit && hit.distance < result.distance) {
                             result = hit;
@@ -131,25 +131,17 @@ Hit traverseBVH(Ray r) {
                         }
                     }
                 }
-                // 내부 노드
-                else {  
-                    int leftChildIndex = int(node.leftRight);
-                    int rightChildIndex = leftChildIndex + 1;
-
-                    // 거리에 따라 순서 조정
-                    vec3 center = (node.aabbMin + node.aabbMax) * 0.5;
-                    if (dot(r.direction, center - r.origin) > 0.0) {
-                        stack[stackPtr++] = rightChildIndex;
-                        stack[stackPtr++] = leftChildIndex;
-                    } else {
-                        stack[stackPtr++] = leftChildIndex;
-                        stack[stackPtr++] = rightChildIndex;
-                    }
-                }
+            } else {  // 내부 노드
+                int leftChildIndex = int(node.leftRight);
+                int rightChildIndex = leftChildIndex + 1;
+                
+                stack[stackPtr++] = rightChildIndex;
+                stack[stackPtr++] = leftChildIndex;
+                depth++;
             }
         }
     }
-
+    
     return result;
 }
 
