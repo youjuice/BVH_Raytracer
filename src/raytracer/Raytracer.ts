@@ -10,7 +10,7 @@ export class Raytracer {
     private plane: Mesh;
     private spheresData: Vector4[];
     private lightPosition: Vector3;
-    private flattenedBVH: number[];
+    private flattenedBVH: Float32Array;
     private bvhTexture: RawTexture;
 
     constructor(private scene: Scene, private camera: FreeCamera, private bvh: BVHNode, private spheres: Sphere[]) {

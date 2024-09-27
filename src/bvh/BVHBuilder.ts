@@ -13,23 +13,20 @@ function expandRootAABB(aabb: AABB, expansionFactor: number = 1.1): AABB {
 }
 
 export function buildBVH(primitives: Primitive[], maxPrimitivesPerLeaf: number = 4): BVHNode {
-    console.log(`Starting BVH construction with ${primitives.length} primitives`);
     if (primitives.length === 0) {
         throw new Error("Cannot build BVH from empty primitive list");
     }
     let aabb = computeAABB(primitives);
     aabb = expandRootAABB(aabb); // 루트 AABB 확장
-    return buildBVHRecursive(primitives, aabb, maxPrimitivesPerLeaf, 0);
+    const root = buildBVHRecursive(primitives, aabb, maxPrimitivesPerLeaf, 0);
+    return root;
 }
 
 function buildBVHRecursive(primitives: Primitive[], aabb: AABB, maxPrimitivesPerLeaf: number, depth: number): BVHNode {
-    console.log(`Depth ${depth}: Processing ${primitives.length} primitives`);
+    console.log(`Depth ${depth}: Building node for ${primitives.length} primitives`);
     const node = new BVHNode(aabb);
 
-    const aabbVolume = aabb.getVolume();
-    const minVolume = 0.01; // 적절한 최소 부피 설정
-
-    if (primitives.length <= maxPrimitivesPerLeaf || aabbVolume < minVolume || depth > 20) {
+    if (primitives.length <= maxPrimitivesPerLeaf || depth > 20) {
         node.primitiveIndices = primitives.map((_, index) => index);
         console.log(`Depth ${depth}: Created leaf node with ${primitives.length} primitives`);
         return node;
@@ -37,27 +34,24 @@ function buildBVHRecursive(primitives: Primitive[], aabb: AABB, maxPrimitivesPer
 
     const axis = aabb.getLongestAxis();
     const sortedPrimitives = sortPrimitivesByAxis(primitives, axis);
-    const splitIndex = findBestSplitSAH(sortedPrimitives, axis);
+    let splitIndex = findBestSplitSAH(sortedPrimitives, axis);
+
+    // 분할 실패 시 중간점으로 강제 분할
+    if (splitIndex <= 0 || splitIndex >= sortedPrimitives.length) {
+        splitIndex = Math.floor(sortedPrimitives.length / 2);
+        console.log(`Depth ${depth}: Split failed, forced middle split at index ${splitIndex}`);
+    }
 
     const leftPrimitives = sortedPrimitives.slice(0, splitIndex);
     const rightPrimitives = sortedPrimitives.slice(splitIndex);
 
-    console.log(`Depth ${depth}: Split resulted in ${leftPrimitives.length} left primitives and ${rightPrimitives.length} right primitives`);
-    
-    if (leftPrimitives.length === 0 || rightPrimitives.length === 0) {
-        node.primitiveIndices = primitives.map((_, index) => index);
-        console.log(`Depth ${depth}: Split failed, created leaf node with ${primitives.length} primitives`);
-        return node;
-    }
-
     const leftAABB = computeAABB(leftPrimitives);
     const rightAABB = computeAABB(rightPrimitives);
 
-    console.log(`Depth ${depth}: Creating left child`);
     node.left = buildBVHRecursive(leftPrimitives, leftAABB, maxPrimitivesPerLeaf, depth + 1);
-    console.log(`Depth ${depth}: Creating right child`);
     node.right = buildBVHRecursive(rightPrimitives, rightAABB, maxPrimitivesPerLeaf, depth + 1);
 
+    console.log(`Depth ${depth}: Created internal node with ${leftPrimitives.length} left primitives and ${rightPrimitives.length} right primitives`);
     return node;
 }
 
@@ -74,7 +68,6 @@ function computeAABB(primitives: Primitive[]): AABB {
             Vector3.Maximize(aabb.max, primitiveAABB.max)
         );
     }
-    console.log(`Computed AABB: min(${aabb.min.x}, ${aabb.min.y}, ${aabb.min.z}), max(${aabb.max.x}, ${aabb.max.y}, ${aabb.max.z})`);
     return aabb;
 }
 
@@ -144,6 +137,9 @@ function findBestSplitSAH(primitives: Primitive[], axis: number): number {
     for (let i = 0; i < bestSplit; i++) {
         splitCount += buckets[i].count;
     }
+
+    // splitCount가 적절한 범위 내에 있는지 확인
+    splitCount = Math.max(1, Math.min(splitCount, primitives.length - 1));
 
     console.log(`SAH split index: ${splitCount}`);
     return splitCount;
