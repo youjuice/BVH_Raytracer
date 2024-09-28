@@ -24,9 +24,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // 구체 생성
     const spheres: Sphere[] = [
         new Sphere(new Vector3(0, 0, 0), 1),
-        new Sphere(new Vector3(-2, 0, 2), 0.5),
+        new Sphere(new Vector3(-3, 0, 2), 0.5),
         new Sphere(new Vector3(2, 0, 2), 0.5),
-        new Sphere(new Vector3(0, 2, -2), 0.7),
+        new Sphere(new Vector3(0, 1, -2), 0.7),
         new Sphere(new Vector3(-1, -1, -1), 0.3),
         new Sphere(new Vector3(1, 1, 1), 0.4),
     ];
