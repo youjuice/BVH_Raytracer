@@ -18,8 +18,7 @@ export function buildBVH(primitives: Primitive[], maxPrimitivesPerLeaf: number =
     }
     let aabb = computeAABB(primitives);
     aabb = expandRootAABB(aabb); // 루트 AABB 확장
-    const root = buildBVHRecursive(primitives, aabb, maxPrimitivesPerLeaf, 0);
-    return root;
+    return buildBVHRecursive(primitives, aabb, maxPrimitivesPerLeaf, 0);
 }
 
 function buildBVHRecursive(primitives: Primitive[], aabb: AABB, maxPrimitivesPerLeaf: number, depth: number): BVHNode {
@@ -86,6 +85,7 @@ function findBestSplitSAH(primitives: Primitive[], axis: number): number {
     const sceneBounds = computeAABB(primitives);
     const sceneExtent = sceneBounds.max.subtract(sceneBounds.min);
     
+    // 버킷에 프리미티브 분배
     for (const primitive of primitives) {
         const centroid = primitive.getAABB().getCenter();
         const bucketIndex = Math.min(bucketCount - 1, Math.floor(bucketCount * (centroid.asArray()[axis] - sceneBounds.min.asArray()[axis]) / sceneExtent.asArray()[axis]));
@@ -96,6 +96,7 @@ function findBestSplitSAH(primitives: Primitive[], axis: number): number {
         );
     }
     
+    // 각 분할 지점에서의 비용 계산
     let minCost = Infinity;
     let bestSplit = -1;
     const totalCount = primitives.length;
@@ -120,7 +121,8 @@ function findBestSplitSAH(primitives: Primitive[], axis: number): number {
         const rightArea = computeAABBSurfaceArea(rightBounds);
 
         const cost = 1 + (leftCount * leftArea + rightCount * rightArea) / computeAABBSurfaceArea(sceneBounds);
-
+        
+        // 최소 비용 갱신
         if (cost < minCost) {
             minCost = cost;
             bestSplit = i;
