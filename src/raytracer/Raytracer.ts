@@ -1,32 +1,56 @@
-import { Scene, FreeCamera, Vector2, Vector3, Vector4, ShaderMaterial, Effect, Mesh } from 'babylonjs';
+import { Engine, Scene, FreeCamera, Vector2, Vector3, Vector4, ShaderMaterial, Effect, Mesh, RawTexture } from 'babylonjs';
 import raytraceFragmentShader from './shaders/raytracer.fragment.glsl';
 import raytraceVertexShader from './shaders/raytracer.vertex.glsl';
+import { BVHNode } from '../bvh/BVHNode';
+import { flattenBVH } from '../bvh/BVHFlattener';
+import { Sphere } from "../geometry/Sphere";
 
 export class Raytracer {
     private rayTraceMaterial: ShaderMaterial;
     private plane: Mesh;
-    private spheres: Vector4[];
+    private spheresData: Vector4[];
     private lightPosition: Vector3;
+    private flattenedBVH: Float32Array;
+    private bvhTexture: RawTexture;
 
-    constructor(private scene: Scene, private camera: FreeCamera) {
+    constructor(private scene: Scene, private camera: FreeCamera, private bvh: BVHNode, private spheres: Sphere[]) {
         this.initShaders();
-        this.initSpheres();
+        this.initSpheresData();
+        this.initBVH();
+        this.initBVHTexture();
         this.initMaterial();
         this.initPlane();
         this.lightPosition = new Vector3(5, 5, -5);
     }
 
     private initShaders() {
-        Effect.ShadersStore["raytraceFragmentShader"] = raytraceFragmentShader;
         Effect.ShadersStore["raytraceVertexShader"] = raytraceVertexShader;
+        Effect.ShadersStore["raytraceFragmentShader"] = raytraceFragmentShader;
     }
 
-    private initSpheres() {
-        this.spheres = [
-            new Vector4(0, 0, 0, 1),
-            new Vector4(-2, 0, 2, 0.5),
-            new Vector4(2, 0, 2, 0.5),
-        ];
+    private initSpheresData() {
+        this.spheresData = this.spheres.map(sphere => sphere.toShaderFormat());
+    }
+
+    private initBVH() {
+        this.flattenedBVH = flattenBVH(this.bvh);
+    }
+
+    private initBVHTexture() {
+        const textureSize = Math.ceil(Math.sqrt(this.flattenedBVH.length / 4));
+        const paddedData = new Float32Array(textureSize * textureSize * 4);
+        paddedData.set(this.flattenedBVH);
+
+        this.bvhTexture = RawTexture.CreateRGBATexture(
+            paddedData,
+            textureSize,
+            textureSize,
+            this.scene,
+            false,
+            false,
+            Engine.TEXTURE_NEAREST_SAMPLINGMODE,
+            Engine.TEXTURETYPE_FLOAT
+        );
     }
 
     private initMaterial() {
@@ -35,11 +59,16 @@ export class Raytracer {
             fragment: "raytrace",
         }, {
             attributes: ["position", "uv"],
-            uniforms: ["worldViewProjection", "cameraPosition", "cameraDirection", "cameraUp", "cameraRight", "aspectRatio", "fov", "spheres", "lightPosition", "resolution"],
+            uniforms: ["worldViewProjection", "cameraPosition", "cameraDirection", "cameraUp", "cameraRight", "aspectRatio", "fov", "spheres", "lightPosition", "resolution", "bvhTextureSize"],
+            samplers: ["bvhTexture"],
             defines: [
-                "#define SPHERE_COUNT " + this.spheres.length
+                "#define SPHERE_COUNT " + this.spheres.length,
+                "#define USE_BVH_TEXTURE"
             ]
         });
+
+        this.rayTraceMaterial.setTexture("bvhTexture", this.bvhTexture);
+        this.rayTraceMaterial.setFloat("bvhTextureSize", this.bvhTexture.getSize().width);
     }
 
     private initPlane() {
@@ -49,7 +78,7 @@ export class Raytracer {
 
     public update() {
         const aspect = this.scene.getEngine().getAspectRatio(this.camera);
-        const spheresArray = this.spheres.reduce((acc, sphere) => {
+        const spheresArray = this.spheresData.reduce((acc, sphere) => {
             acc.push(sphere.x, sphere.y, sphere.z, sphere.w);
             return acc;
         }, [] as number[]);

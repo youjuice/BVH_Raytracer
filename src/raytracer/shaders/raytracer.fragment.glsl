@@ -1,34 +1,44 @@
 #version 300 es
 precision highp float;
+precision highp int;
 
-#define SPHERE_COUNT 3
-const int MAX_BOUNCES = 3;
+const int MAX_BOUNCES = 2;
 
-uniform mat4 worldViewProjection;       // 월드 및 뷰 변환 행렬
-uniform vec3 cameraPosition;            // 카메라 위치
-uniform vec3 cameraDirection;           // 카메라 방향
+uniform mat4 worldViewProjection;               // 월드 및 뷰 변환 행렬
+uniform vec3 cameraPosition;                    // 카메라 위치
+uniform vec3 cameraDirection;                   // 카메라 방향
 uniform vec3 cameraUp;
 uniform vec3 cameraRight;
-uniform float aspectRatio;              // 화면 비율
-uniform float fov;                      // 카메라의 시야각
-uniform vec4 spheres[SPHERE_COUNT];     // 구체 데이터
-uniform vec3 lightPosition;             // 빛의 위치
-uniform vec2 resolution;                // 화면 해상도
-out vec4 fragColor;                     // 최종적으로 출력되는 픽셀 색상
+uniform float aspectRatio;                      // 화면 비율
+uniform float fov;                              // 카메라의 시야각
+uniform vec4 spheres[SPHERE_COUNT];             // 구체 데이터
+uniform vec3 lightPosition;                     // 빛의 위치
+uniform vec2 resolution;                        // 화면 해상도
+uniform sampler2D bvhTexture;
+uniform float bvhTextureSize;
 
-struct Ray {                            // 광선 구조체
+out vec4 fragColor;                             // 최종적으로 출력되는 픽셀 색상
+
+struct Ray {
     vec3 origin;
     vec3 direction;
 };
 
-struct Hit {                            // 광선과 구체의 교차 정보
+struct Hit {
     bool didHit;
     float distance;
     vec3 position;
     vec3 normal;
+    int sphereIndex;
 };
 
-// 카메라 광선 생성
+struct BVHNode {
+    vec3 aabbMin;
+    vec3 aabbMax;
+    float leftRight;        // 내부 노드의 경우 왼쪽 자식, 리프 노드의 경우 프리미티브 인덱스
+    float primitiveCount;   // 내부 노드의 경우 0, 리프 노드의 경우 프리미티브 수
+};
+
 Ray createCameraRay(vec2 uv) {
     vec2 ndc = uv * 2.0 - 1.0;
     ndc.x *= aspectRatio;
@@ -38,76 +48,148 @@ Ray createCameraRay(vec2 uv) {
     return Ray(cameraPosition, direction);
 }
 
-// 광선과 구체의 교차점 계산
-Hit intersectSphere(Ray ray, vec4 sphere) {
-    vec3 oc = ray.origin - sphere.xyz;
-    float b = dot(oc, ray.direction);
+Hit intersectSphere(Ray r, vec4 sphere) {
+    vec3 oc = r.origin - sphere.xyz;
+    float a = dot(r.direction, r.direction);
+    float b = 2.0 * dot(oc, r.direction);
     float c = dot(oc, oc) - sphere.w * sphere.w;
-    float discriminant = b * b - c;
-
-    if (discriminant < 0.0) return Hit(false, 0.0, vec3(0.0), vec3(0.0));
-
-    float t = -b - sqrt(discriminant);
-    if (t < 0.0) t = -b + sqrt(discriminant);
-    if (t < 0.0) return Hit(false, 0.0, vec3(0.0), vec3(0.0));
-
-    vec3 position = ray.origin + ray.direction * t;
-    vec3 normal = normalize(position - sphere.xyz);
-
-    return Hit(true, t, position, normal);
-}
-
-// 그림자 유무 판단
-bool isInShadow(vec3 position, vec3 lightDir) {
-    Ray shadowRay = Ray(position + lightDir * 0.001, lightDir);
-    for (int i = 0; i < SPHERE_COUNT; i++) {
-        Hit hit = intersectSphere(shadowRay, spheres[i]);
-        if (hit.didHit) {
-            return true;
+    float discriminant = b * b - 4.0 * a * c;
+    
+    Hit result;
+    if (discriminant > 0.0) {
+        float t = (-b - sqrt(discriminant)) / (2.0 * a);
+        if (t > 0.0) {
+            result.didHit = true;
+            result.distance = t;
+            result.position = r.origin + t * r.direction;
+            result.normal = normalize(result.position - sphere.xyz);
+            return result;
         }
     }
-    return false;
+    
+    result.didHit = false;
+    return result;
 }
 
-// 조명 계산
+bool intersectAABB(Ray r, vec3 boxMin, vec3 boxMax) {
+    vec3 invDir = 1.0 / (r.direction + vec3(1e-6));
+    vec3 t0 = (boxMin - r.origin) * invDir;
+    vec3 t1 = (boxMax - r.origin) * invDir;
+    vec3 tmin = min(t0, t1);
+    vec3 tmax = max(t0, t1);
+    float tNear = max(max(tmin.x, tmin.y), tmin.z);
+    float tFar = min(min(tmax.x, tmax.y), tmax.z);
+    return tNear <= tFar;
+}
+
+BVHNode getBVHNode(int index) {
+    int y = index / int(bvhTextureSize);
+    int x = index % int(bvhTextureSize);
+    vec2 uv = (vec2(x, y) + 0.5) / bvhTextureSize;
+    
+    vec4 data1 = texture(bvhTexture, uv);
+    vec4 data2 = texture(bvhTexture, vec2(uv.x + 1.0 / bvhTextureSize, uv.y));
+    
+    BVHNode node;
+    node.aabbMin = data1.xyz;
+    node.aabbMax = data2.xyz;
+    node.leftRight = data1.w;
+    node.primitiveCount = data2.w;
+    
+    return node;
+}
+
+Hit traverseBVH(Ray r) {
+    Hit result;
+    result.didHit = false;
+    result.distance = 1e30;
+    result.sphereIndex = -1;
+    
+    int stack[64];
+    int stackPtr = 0;
+    stack[stackPtr++] = 0;  // 루트 노드부터 시작
+    
+    int maxDepth = 64;  // 최대 순회 깊이 설정
+    int depth = 0;
+    
+    while (stackPtr > 0 && depth < maxDepth) {
+        int nodeIndex = stack[--stackPtr];
+        BVHNode node = getBVHNode(nodeIndex);
+        
+        if (intersectAABB(r, node.aabbMin, node.aabbMax)) {
+            if (int(node.primitiveCount) < 0) {  // 리프 노드
+                int primitiveCount = int(abs(node.primitiveCount));
+                int firstPrimitiveIndex = int(node.leftRight);
+                
+                for (int i = 0; i < primitiveCount; i++) {
+                    int sphereIndex = firstPrimitiveIndex + i;
+                    if (sphereIndex < SPHERE_COUNT) {  // 배열 범위 체크 추가
+                        Hit hit = intersectSphere(r, spheres[sphereIndex]);
+                        if (hit.didHit && hit.distance < result.distance) {
+                            result = hit;
+                            result.sphereIndex = sphereIndex;
+                        }
+                    }
+                }
+            } else {  // 내부 노드
+                int leftChildIndex = int(node.leftRight);
+                int rightChildIndex = leftChildIndex + 1;
+                
+                stack[stackPtr++] = rightChildIndex;
+                stack[stackPtr++] = leftChildIndex;
+                depth++;
+            }
+        }
+    }
+    
+    return result;
+}
+
+// 직접 교차 검사 (BVH 사용 X)
+Hit directIntersectionTest(Ray r) {
+    Hit result;
+    result.didHit = false;
+    result.distance = 1e30;
+    
+    for (int i = 0; i < SPHERE_COUNT; i++) {
+        Hit hit = intersectSphere(r, spheres[i]);
+        if (hit.didHit && hit.distance < result.distance) {
+            result = hit;
+            result.sphereIndex = i;
+        }
+    }
+    
+    return result;
+}
+
+bool isInShadow(vec3 position, vec3 lightDir) {
+    Ray shadowRay = Ray(position + lightDir * 0.001, lightDir);
+    Hit hit = traverseBVH(shadowRay);
+    return hit.didHit;
+}
+
 vec3 calculateLighting(vec3 position, vec3 normal, vec3 viewDir) {
     vec3 lightDir = normalize(lightPosition - position);
 
-    // 앰비언트
     vec3 ambient = vec3(0.1);
-
-    // 디퓨즈
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = vec3(0.7) * diff;
-
-    // 스페큘러
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
     vec3 specular = vec3(0.5) * spec;
-
-    // 그림자
     float shadow = isInShadow(position, lightDir) ? 0.5 : 1.0;
 
     return (ambient + (diffuse + specular) * shadow);
 }
 
-// 광선 추적
 vec3 traceRay(Ray initialRay) {
     vec3 color = vec3(0.0);
     vec3 rayColor = vec3(1.0);
     Ray currentRay = initialRay;
 
     for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
-        Hit closestHit;
-        closestHit.didHit = false;
-        closestHit.distance = 1e20;
-
-        for (int i = 0; i < SPHERE_COUNT; i++) {
-            Hit hit = intersectSphere(currentRay, spheres[i]);
-            if (hit.didHit && hit.distance < closestHit.distance) {
-                closestHit = hit;
-            }
-        }
+        Hit closestHit = traverseBVH(currentRay);
+        // Hit closestHit = directIntersectionTest(currentRay);
 
         if (closestHit.didHit) {
             vec3 viewDir = normalize(cameraPosition - closestHit.position);
